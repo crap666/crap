@@ -1,0 +1,59 @@
+with ow as (
+    with shf as (select cs.chain_id,
+                        cs.start_time,
+                        cs.end_time,
+                        generate_series(date_trunc('day', cs.start_time), 
+                                        date_trunc('day', cs.end_time), 
+                                        interval '1 day') day_mark
+                 from chain_shifts cs
+                 where cs.overwork_mark is not null
+                 -- !! and cs.end_time > now() - interval '24 hours')
+    select 
+           distinct sw.driver_id driver_id,
+           shf.day_mark day_mark,
+           (sum(extract(  
+               epoch from (least(sw.end_time, shf.day_mark + interval '1 day') 
+                            - greatest(sw.start_time, shf.day_mark) )
+           )) / 60)::bigint overwork
+    from shift_work sw, 
+         shf
+    where sw.driver_id in (select dr.driver_id from drivers_ref dr where dr.chain_id = shf.chain_id)
+      and sw.start_time >= shf.start_time 
+      and sw.start_time < shf.end_time
+      and shf.day_mark between date_trunc('day', sw.start_time) and date_trunc('day', sw.end_time)
+    group by sw.driver_id,
+           shf.day_mark
+    order by shf.day_mark
+     )
+insert into work_daily_driver as wdd
+(driver_id, day, overwork_total_mins)
+select ow.driver_id, ow.day_mark, ow.overwork
+from ow
+on conflict(driver_id, day)
+do update
+set overwork_total_mins = (select ow.overwork 
+                            from ow 
+                            where ow.driver_id = wdd.driver_id 
+                            and ow.day_mark = wdd.day)
+;
+
+
+
+from PIL import Image, ImageFilter
+import glob
+
+
+if __name__ == '__main__':
+    for f in glob.glob('/home/gleb/img/for_blur/*g'):  # assuming gif
+    # for f, dir, r in os.walk('/home/gleb/img/for_blur'):
+        im = Image.open(f)
+
+        rect = (100, 30, 300, 600)
+
+        croped = im.crop(rect)
+
+        for i in range(50):  
+            croped = croped.filter(ImageFilter.BLUR)
+        im.paste(croped, rect)
+
+        im.save(f)
